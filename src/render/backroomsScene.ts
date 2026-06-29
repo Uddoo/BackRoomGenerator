@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { cellToWorld } from "../game/generator";
-import type { GeneratedMap, GridPoint } from "../game/types";
+import type { Direction, GeneratedMap, GridPoint } from "../game/types";
 import { createBackroomsMaterials, disposeMaterials, type BackroomsMaterials } from "./textures";
 
 const WALL_HEIGHT = 2.85;
@@ -50,7 +50,7 @@ export class BackroomsScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.08;
+    this.renderer.toneMappingExposure = 1.26;
     this.renderer.domElement.tabIndex = 0;
     this.container.appendChild(this.renderer.domElement);
 
@@ -59,8 +59,8 @@ export class BackroomsScene {
     this.scene.add(this.camera);
 
     this.materials = createBackroomsMaterials();
-    this.scene.background = new THREE.Color("#090806");
-    this.scene.fog = new THREE.FogExp2("#2b2718", 0.023);
+    this.scene.background = new THREE.Color("#6f622d");
+    this.scene.fog = new THREE.FogExp2("#8a7c3f", 0.013);
     this.scene.add(this.worldGroup);
     this.addLighting();
     this.bindContextLossGuard();
@@ -77,13 +77,13 @@ export class BackroomsScene {
     const wallMesh = this.createWallMesh(map);
     const lightMesh = this.createLightMesh(map);
     const pillarMesh = this.createPillarMesh(map);
-    const exitDoor = this.createExitDoor(map);
+    const exitDoors = this.createExitDoors(map);
 
-    this.worldGroup.add(floorMesh, ceilingMesh, wallMesh, lightMesh, pillarMesh, exitDoor);
+    this.worldGroup.add(floorMesh, ceilingMesh, wallMesh, lightMesh, pillarMesh, exitDoors);
 
     const spawn = cellToWorld(map, map.spawn);
     this.camera.position.set(spawn.x, PLAYER_HEIGHT, spawn.z);
-    this.camera.rotation.set(0, 0, 0);
+    this.camera.rotation.set(0, directionToYaw(map.spawnFacing), 0);
 
     this.stats = {
       wallCount: map.wallSegments.length,
@@ -175,11 +175,12 @@ export class BackroomsScene {
     return mesh;
   }
 
-  private createLightMesh(map: GeneratedMap): THREE.InstancedMesh {
+  private createLightMesh(map: GeneratedMap): THREE.Group {
     const lightCount = countCells(map.lights);
-    const geometry = new THREE.BoxGeometry(1.55, 0.045, 0.24);
-    const mesh = new THREE.InstancedMesh(geometry, this.materials.light, lightCount);
-    mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    const group = new THREE.Group();
+    const tubeGeometry = new THREE.BoxGeometry(1.55, 0.03, 0.032);
+    const tubeMesh = new THREE.InstancedMesh(tubeGeometry, this.materials.light, lightCount * 4);
+    tubeMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
     let instance = 0;
 
     forEachOpenCell(map, (point, cellIndex) => {
@@ -188,21 +189,27 @@ export class BackroomsScene {
       }
 
       const world = cellToWorld(map, point);
-      this.dummy.position.set(world.x, WALL_HEIGHT - 0.07, world.z);
-      this.dummy.rotation.set(0, (point.x + point.y) % 2 === 0 ? 0 : Math.PI / 2, 0);
-      this.dummy.scale.setScalar(1);
-      this.dummy.updateMatrix();
-      mesh.setMatrixAt(instance, this.dummy.matrix);
-      instance += 1;
+      const horizontal = (point.x + point.y) % 2 === 0;
+      const rotation = horizontal ? 0 : Math.PI / 2;
+      for (let tube = 0; tube < 4; tube += 1) {
+        const offset = (tube - 1.5) * 0.12;
+        this.dummy.position.set(world.x + (horizontal ? 0 : offset), WALL_HEIGHT - 0.065, world.z + (horizontal ? offset : 0));
+        this.dummy.rotation.set(0, rotation, 0);
+        this.dummy.scale.setScalar(1);
+        this.dummy.updateMatrix();
+        tubeMesh.setMatrixAt(instance, this.dummy.matrix);
+        instance += 1;
+      }
     });
 
-    mesh.instanceMatrix.needsUpdate = true;
-    return mesh;
+    tubeMesh.instanceMatrix.needsUpdate = true;
+    group.add(tubeMesh);
+    return group;
   }
 
   private createPillarMesh(map: GeneratedMap): THREE.InstancedMesh {
     const pillarCount = countCells(map.pillars);
-    const geometry = new THREE.BoxGeometry(0.48, WALL_HEIGHT, 0.48);
+    const geometry = new THREE.BoxGeometry(0.92, WALL_HEIGHT, 0.92);
     const mesh = new THREE.InstancedMesh(geometry, this.materials.pillar, pillarCount);
     mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
     let instance = 0;
@@ -225,17 +232,31 @@ export class BackroomsScene {
     return mesh;
   }
 
-  private createExitDoor(map: GeneratedMap): THREE.Mesh {
-    const door = new THREE.Mesh(new THREE.BoxGeometry(1.25, 2.08, 0.1), this.materials.door);
-    const world = cellToWorld(map, map.exit);
+  private createExitDoors(map: GeneratedMap): THREE.Group {
+    const group = new THREE.Group();
+    group.add(this.createDoorMesh(map, map.exit, map.exitFacing, this.materials.door));
+    for (const falseExit of map.falseExits) {
+      group.add(this.createDoorMesh(map, falseExit, falseExit.facing, this.materials.falseDoor));
+    }
+    return group;
+  }
+
+  private createDoorMesh(
+    map: GeneratedMap,
+    point: GridPoint,
+    facing: GeneratedMap["exitFacing"],
+    material: THREE.MeshStandardMaterial
+  ): THREE.Mesh {
+    const door = new THREE.Mesh(new THREE.BoxGeometry(1.25, 2.08, 0.1), material);
+    const world = cellToWorld(map, point);
     const offset = map.cellSize / 2 - 0.035;
     door.position.set(world.x, 1.04, world.z);
 
-    if (map.exitFacing === "north") {
+    if (facing === "north") {
       door.position.z -= offset;
-    } else if (map.exitFacing === "south") {
+    } else if (facing === "south") {
       door.position.z += offset;
-    } else if (map.exitFacing === "east") {
+    } else if (facing === "east") {
       door.position.x += offset;
       door.rotation.y = Math.PI / 2;
     } else {
@@ -247,10 +268,13 @@ export class BackroomsScene {
   }
 
   private addLighting(): void {
-    const hemisphere = new THREE.HemisphereLight("#f2df95", "#473618", 1.18);
+    const ambient = new THREE.AmbientLight("#f5e59f", 0.74);
+    this.scene.add(ambient);
+
+    const hemisphere = new THREE.HemisphereLight("#fff1ac", "#a09055", 1.56);
     this.scene.add(hemisphere);
 
-    const playerLight = new THREE.PointLight("#fff3b3", 1.8, 14, 1.6);
+    const playerLight = new THREE.PointLight("#fff2ad", 0.95, 17, 1.35);
     playerLight.position.set(0, 0.1, 0.15);
     this.camera.add(playerLight);
   }
@@ -295,6 +319,19 @@ function countCells(cells: Uint8Array): number {
     count += cell;
   }
   return count;
+}
+
+function directionToYaw(direction: Direction): number {
+  if (direction === "east") {
+    return -Math.PI / 2;
+  }
+  if (direction === "south") {
+    return Math.PI;
+  }
+  if (direction === "west") {
+    return Math.PI / 2;
+  }
+  return 0;
 }
 
 function disposeObject(object: THREE.Object3D): void {

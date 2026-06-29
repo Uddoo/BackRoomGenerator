@@ -2,7 +2,7 @@ import "./style.css";
 import { PerfMeter } from "./diagnostics/perf";
 import { cellToWorld, generateBackrooms } from "./game/generator";
 import { createShareSeed, normalizeSeed } from "./game/random";
-import type { GeneratedMap } from "./game/types";
+import type { Direction, GeneratedMap } from "./game/types";
 import { BackroomsScene, type SceneStats } from "./render/backroomsScene";
 import { FirstPersonController } from "./render/firstPersonController";
 import { getHudElements, setPointerLocked, updateMapHud, updatePerfHud } from "./ui/hud";
@@ -38,7 +38,7 @@ function loadMap(seed: string, size: number, updateHistory = true): void {
   currentMap = generateBackrooms(seed, size);
   scene.setMap(currentMap);
   const spawn = cellToWorld(currentMap, currentMap.spawn);
-  controller.teleport(spawn);
+  controller.teleport(spawn, directionToYaw(currentMap.spawnFacing));
   latestStats = scene.render();
   updateMapHud(hud, currentMap, latestStats);
 
@@ -56,12 +56,18 @@ Object.assign(window, {
       seed: currentMap.seed,
       width: currentMap.width,
       openCount: currentMap.openCount,
+      spawn: currentMap.spawn,
+      spawnFacing: currentMap.spawnFacing,
+      falseExitCount: currentMap.falseExits.length,
+      experience: currentMap.experience,
+      validation: currentMap.validation,
       wallCount: latestStats.wallCount,
       drawCalls: latestStats.drawCalls,
       camera: {
         x: scene.camera.position.x,
         y: scene.camera.position.y,
-        z: scene.camera.position.z
+        z: scene.camera.position.z,
+        rotationY: scene.camera.rotation.y
       }
     })
   }
@@ -128,3 +134,16 @@ window.requestAnimationFrame(frame);
 window.addEventListener("beforeunload", () => {
   scene.dispose();
 });
+
+function directionToYaw(direction: Direction): number {
+  if (direction === "east") {
+    return -Math.PI / 2;
+  }
+  if (direction === "south") {
+    return Math.PI;
+  }
+  if (direction === "west") {
+    return Math.PI / 2;
+  }
+  return 0;
+}

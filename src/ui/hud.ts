@@ -32,8 +32,10 @@ export function getHudElements(): HudElements {
 export function updateMapHud(elements: HudElements, map: GeneratedMap, stats: SceneStats): void {
   elements.seedInput.value = map.seed;
   elements.sizeSelect.value = String(map.width);
-  elements.statusText.textContent = `Seed ${map.seed}`;
-  elements.mapStats.textContent = `${map.openCount} cells · ${map.roomCount} rooms · ${stats.wallCount} walls`;
+  const summary = `${themeLabel(map.experience.theme.themeId)} · D${map.experience.danger.dangerClass} · ${map.validation.passable ? "validated" : "review"}`;
+  elements.statusText.dataset.mapSummary = summary;
+  elements.statusText.textContent = summary;
+  elements.mapStats.textContent = `${map.openCount} cells · ${map.roomCount} rooms · ${map.loopCount} loops · ${map.falseExits.length} false exits · ${stats.wallCount} walls · ${map.validation.exitDistance} route`;
 }
 
 export function updatePerfHud(elements: HudElements, fps: number, stats: SceneStats): void {
@@ -45,7 +47,7 @@ export function updatePerfHud(elements: HudElements, fps: number, stats: SceneSt
 export function setPointerLocked(elements: HudElements, locked: boolean): void {
   document.body.classList.toggle("is-pointer-locked", locked);
   elements.startOverlay.classList.toggle("is-hidden", locked);
-  elements.statusText.textContent = locked ? "Exploring" : "Paused";
+  elements.statusText.textContent = locked ? "Exploring" : (elements.statusText.dataset.mapSummary ?? "Paused");
 }
 
 function getElement<T extends HTMLElement>(id: string, constructor: { new (): T }): T {
@@ -54,4 +56,11 @@ function getElement<T extends HTMLElement>(id: string, constructor: { new (): T 
     throw new Error(`Missing required element: #${id}`);
   }
   return element;
+}
+
+function themeLabel(themeId: GeneratedMap["experience"]["theme"]["themeId"]): string {
+  return themeId
+    .split("_")
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(" ");
 }
