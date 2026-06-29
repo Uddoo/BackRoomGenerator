@@ -13,6 +13,8 @@ export class FirstPersonController {
   private yaw = 0;
   private pitch = 0;
   private bobTime = 0;
+  private readonly forwardVector = new THREE.Vector3();
+  private readonly rightVector = new THREE.Vector3();
   private readonly pressed = new Set<string>();
 
   constructor(
@@ -58,8 +60,14 @@ export class FirstPersonController {
     const normalizedStrafe = strafe / length;
     const speed = this.isPressed("ShiftLeft") || this.isPressed("ShiftRight") ? RUN_SPEED : WALK_SPEED;
     const distance = speed * deltaSeconds;
-    const dx = (Math.sin(this.yaw) * normalizedForward + Math.cos(this.yaw) * normalizedStrafe) * distance;
-    const dz = (-Math.cos(this.yaw) * normalizedForward + Math.sin(this.yaw) * normalizedStrafe) * distance;
+
+    this.camera.getWorldDirection(this.forwardVector);
+    this.forwardVector.y = 0;
+    this.forwardVector.normalize();
+    this.rightVector.crossVectors(this.forwardVector, this.camera.up).normalize();
+
+    const dx = (this.forwardVector.x * normalizedForward + this.rightVector.x * normalizedStrafe) * distance;
+    const dz = (this.forwardVector.z * normalizedForward + this.rightVector.z * normalizedStrafe) * distance;
     const next = resolveMovement(
       map,
       { x: this.camera.position.x, z: this.camera.position.z },
