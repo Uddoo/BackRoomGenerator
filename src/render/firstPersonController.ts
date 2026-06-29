@@ -7,7 +7,15 @@ const PLAYER_RADIUS = 0.38;
 const WALK_SPEED = 3.35;
 const RUN_SPEED = 5.55;
 const LOOK_SPEED = 0.0022;
+const TOUCH_LOOK_SPEED = 0.004;
 const MAX_PITCH = Math.PI / 2 - 0.08;
+
+export interface TouchControlElements {
+  moveZone: HTMLElement;
+  moveKnob: HTMLElement;
+  lookZone: HTMLElement;
+  runButton: HTMLButtonElement;
+}
 
 export class FirstPersonController {
   private yaw = 0;
@@ -16,6 +24,14 @@ export class FirstPersonController {
   private readonly forwardVector = new THREE.Vector3();
   private readonly rightVector = new THREE.Vector3();
   private readonly pressed = new Set<string>();
+  private readonly touchMove = new THREE.Vector2();
+  private touchEnabled = false;
+  private touchEngaged = false;
+  private touchRun = false;
+  private movePointerId: number | null = null;
+  private lookPointerId: number | null = null;
+  private lookLastX = 0;
+  private lookLastY = 0;
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
@@ -29,8 +45,116 @@ export class FirstPersonController {
     return document.pointerLockElement === this.canvas;
   }
 
+  get active(): boolean {
+    return this.locked || this.touchEngaged;
+  }
+
+  setTouchEnabled(enabled: boolean): void {
+    this.touchEnabled = enabled;
+    if (!enabled && this.touchEngaged) {
+      this.touchEngaged = false;
+      this.onLockChange(this.active);
+    }
+  }
+
   lock(): void {
     this.canvas.requestPointerLock();
+  }
+
+  start(): void {
+    if (this.touchEnabled) {
+      this.touchEngaged = true;
+      this.canvas.focus();
+      this.onLockChange(this.active);
+      return;
+    }
+
+    this.lock();
+  }
+
+  bindTouchControls(elements: TouchControlElements): void {
+    elements.moveZone.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      this.touchEngaged = true;
+      this.movePointerId = event.pointerId;
+      elements.moveZone.setPointerCapture(event.pointerId);
+      this.updateTouchMove(event, elements);
+      this.onLockChange(this.active);
+    });
+
+    elements.moveZone.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== this.movePointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      this.updateTouchMove(event, elements);
+    });
+
+    const stopMove = (event: PointerEvent): void => {
+      if (event.pointerId !== this.movePointerId) {
+        return;
+      }
+
+      this.movePointerId = null;
+      this.touchMove.set(0, 0);
+      elements.moveKnob.style.transform = "translate(-50%, -50%)";
+    };
+
+    elements.moveZone.addEventListener("pointerup", stopMove);
+    elements.moveZone.addEventListener("pointercancel", stopMove);
+    elements.moveZone.addEventListener("lostpointercapture", stopMove);
+
+    elements.lookZone.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      this.touchEngaged = true;
+      this.lookPointerId = event.pointerId;
+      this.lookLastX = event.clientX;
+      this.lookLastY = event.clientY;
+      elements.lookZone.setPointerCapture(event.pointerId);
+      this.onLockChange(this.active);
+    });
+
+    elements.lookZone.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== this.lookPointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      this.applyLookDelta(
+        (event.clientX - this.lookLastX) * TOUCH_LOOK_SPEED,
+        (event.clientY - this.lookLastY) * TOUCH_LOOK_SPEED
+      );
+      this.lookLastX = event.clientX;
+      this.lookLastY = event.clientY;
+    });
+
+    const stopLook = (event: PointerEvent): void => {
+      if (event.pointerId === this.lookPointerId) {
+        this.lookPointerId = null;
+      }
+    };
+
+    elements.lookZone.addEventListener("pointerup", stopLook);
+    elements.lookZone.addEventListener("pointercancel", stopLook);
+    elements.lookZone.addEventListener("lostpointercapture", stopLook);
+
+    const setRun = (running: boolean): void => {
+      this.touchRun = running;
+      elements.runButton.classList.toggle("is-active", running);
+      elements.runButton.setAttribute("aria-pressed", String(running));
+    };
+
+    elements.runButton.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      this.touchEngaged = true;
+      elements.runButton.setPointerCapture(event.pointerId);
+      setRun(true);
+      this.onLockChange(this.active);
+    });
+    elements.runButton.addEventListener("pointerup", () => setRun(false));
+    elements.runButton.addEventListener("pointercancel", () => setRun(false));
+    elements.runButton.addEventListener("lostpointercapture", () => setRun(false));
   }
 
   teleport(point: WorldPoint, yaw = 0): void {
@@ -41,25 +165,28 @@ export class FirstPersonController {
   }
 
   update(deltaSeconds: number, map: GeneratedMap): void {
-    if (!this.locked) {
+    if (!this.active) {
       return;
     }
 
-    const forward = Number(this.isPressed("KeyW") || this.isPressed("ArrowUp")) -
-      Number(this.isPressed("KeyS") || this.isPressed("ArrowDown"));
-    const strafe = Number(this.isPressed("KeyD") || this.isPressed("ArrowRight")) -
-      Number(this.isPressed("KeyA") || this.isPressed("ArrowLeft"));
-    const length = Math.hypot(forward, strafe);
+    const forwardInput = Number(this.isPressed("KeyW") || this.isPressed("ArrowUp")) -
+      Number(this.isPressed("KeyS") || this.isPressed("ArrowDown")) -
+      this.touchMove.y;
+    const strafeInput = Number(this.isPressed("KeyD") || this.isPressed("ArrowRight")) -
+      Number(this.isPressed("KeyA") || this.isPressed("ArrowLeft")) +
+      this.touchMove.x;
+    const inputLength = Math.hypot(forwardInput, strafeInput);
+    const movementScale = Math.min(1, inputLength);
 
-    if (length === 0) {
+    if (inputLength === 0) {
       this.camera.position.y += (PLAYER_HEIGHT - this.camera.position.y) * Math.min(deltaSeconds * 10, 1);
       return;
     }
 
-    const normalizedForward = forward / length;
-    const normalizedStrafe = strafe / length;
-    const speed = this.isPressed("ShiftLeft") || this.isPressed("ShiftRight") ? RUN_SPEED : WALK_SPEED;
-    const distance = speed * deltaSeconds;
+    const normalizedForward = forwardInput / inputLength;
+    const normalizedStrafe = strafeInput / inputLength;
+    const speed = this.isPressed("ShiftLeft") || this.isPressed("ShiftRight") || this.touchRun ? RUN_SPEED : WALK_SPEED;
+    const distance = speed * deltaSeconds * movementScale;
 
     this.camera.getWorldDirection(this.forwardVector);
     this.forwardVector.y = 0;
@@ -84,14 +211,14 @@ export class FirstPersonController {
 
   private bindEvents(): void {
     this.canvas.addEventListener("click", () => {
-      if (!this.locked) {
+      if (!this.locked && !this.touchEnabled) {
         this.lock();
       }
     });
 
     document.addEventListener("pointerlockchange", () => {
       const locked = this.locked;
-      this.onLockChange(locked);
+      this.onLockChange(this.active);
       if (!locked) {
         this.pressed.clear();
       }
@@ -102,10 +229,7 @@ export class FirstPersonController {
         return;
       }
 
-      this.yaw -= event.movementX * LOOK_SPEED;
-      this.pitch -= event.movementY * LOOK_SPEED;
-      this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch));
-      this.applyRotation();
+      this.applyLookDelta(event.movementX * LOOK_SPEED, event.movementY * LOOK_SPEED);
     });
 
     window.addEventListener("keydown", (event) => {
@@ -123,6 +247,29 @@ export class FirstPersonController {
 
   private isPressed(code: string): boolean {
     return this.pressed.has(code);
+  }
+
+  private updateTouchMove(event: PointerEvent, elements: TouchControlElements): void {
+    const bounds = elements.moveZone.getBoundingClientRect();
+    const centerX = bounds.left + bounds.width / 2;
+    const centerY = bounds.top + bounds.height / 2;
+    const maxDistance = Math.max(24, Math.min(bounds.width, bounds.height) * 0.36);
+    const rawX = event.clientX - centerX;
+    const rawY = event.clientY - centerY;
+    const rawLength = Math.hypot(rawX, rawY);
+    const scale = rawLength > maxDistance ? maxDistance / rawLength : 1;
+    const knobX = rawX * scale;
+    const knobY = rawY * scale;
+
+    this.touchMove.set(knobX / maxDistance, knobY / maxDistance);
+    elements.moveKnob.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
+  }
+
+  private applyLookDelta(deltaX: number, deltaY: number): void {
+    this.yaw -= deltaX;
+    this.pitch -= deltaY;
+    this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch));
+    this.applyRotation();
   }
 
   private applyRotation(): void {

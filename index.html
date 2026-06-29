@@ -43,9 +43,20 @@
       <div id="start-overlay" class="start-overlay">
         <div class="start-panel">
           <h1>Enter the generated backrooms</h1>
-          <p>WASD to move, mouse to look, Shift to run, Esc to release.</p>
+          <p>
+            <span class="desktop-copy">WASD to move, mouse to look, Shift to run, Esc to release.</span>
+            <span class="touch-copy">Use the left pad to move and drag on the right side to look.</span>
+          </p>
           <button id="start-button" type="button">Start Walking</button>
         </div>
+      </div>
+
+      <div id="touch-controls" class="touch-controls" aria-label="Touch exploration controls">
+        <div id="touch-move-zone" class="touch-zone touch-move-zone" aria-label="Move">
+          <div id="touch-move-knob" class="touch-move-knob" aria-hidden="true"></div>
+        </div>
+        <button id="touch-run-button" class="touch-run-button" type="button" aria-pressed="false">Run</button>
+        <div id="touch-look-zone" class="touch-zone touch-look-zone" aria-label="Look"></div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

@@ -24,6 +24,19 @@ let latestStats: SceneStats;
 const controller = new FirstPersonController(scene.camera, scene.renderer.domElement, (locked) => {
   setPointerLocked(hud, locked);
 });
+controller.bindTouchControls(hud.touchControls);
+
+const touchPointerQuery = window.matchMedia("(pointer: coarse)");
+
+function syncTouchMode(): void {
+  const touchEnabled = touchPointerQuery.matches || navigator.maxTouchPoints > 0 || window.innerWidth <= 720;
+  document.body.classList.toggle("is-touch-device", touchEnabled);
+  controller.setTouchEnabled(touchEnabled);
+}
+
+syncTouchMode();
+touchPointerQuery.addEventListener("change", syncTouchMode);
+window.addEventListener("resize", syncTouchMode);
 
 function readInitialSeed(): string {
   return initialParams.has("seed") ? normalizeSeed(initialParams.get("seed")) : createShareSeed();
@@ -100,7 +113,7 @@ hud.randomButton.addEventListener("click", () => {
 });
 
 hud.copyButton.addEventListener("click", copyShareLink);
-hud.startButton.addEventListener("click", () => controller.lock());
+hud.startButton.addEventListener("click", () => controller.start());
 
 window.addEventListener("keydown", (event) => {
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {

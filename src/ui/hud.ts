@@ -12,6 +12,15 @@ export interface HudElements {
   statusText: HTMLElement;
   mapStats: HTMLElement;
   fpsMeter: HTMLElement;
+  touchControls: TouchControlElements;
+}
+
+export interface TouchControlElements {
+  container: HTMLElement;
+  moveZone: HTMLElement;
+  moveKnob: HTMLElement;
+  lookZone: HTMLElement;
+  runButton: HTMLButtonElement;
 }
 
 export function getHudElements(): HudElements {
@@ -25,13 +34,20 @@ export function getHudElements(): HudElements {
     startOverlay: getElement("start-overlay", HTMLElement),
     statusText: getElement("status-text", HTMLElement),
     mapStats: getElement("map-stats", HTMLElement),
-    fpsMeter: getElement("fps-meter", HTMLElement)
+    fpsMeter: getElement("fps-meter", HTMLElement),
+    touchControls: {
+      container: getElement("touch-controls", HTMLElement),
+      moveZone: getElement("touch-move-zone", HTMLElement),
+      moveKnob: getElement("touch-move-knob", HTMLElement),
+      lookZone: getElement("touch-look-zone", HTMLElement),
+      runButton: getElement("touch-run-button", HTMLButtonElement)
+    }
   };
 }
 
 export function updateMapHud(elements: HudElements, map: GeneratedMap, stats: SceneStats): void {
   elements.seedInput.value = map.seed;
-  elements.sizeSelect.value = String(map.width);
+  syncSizeSelect(elements.sizeSelect, map.width);
   const summary = `${themeLabel(map.experience.theme.themeId)} · D${map.experience.danger.dangerClass} · ${map.validation.passable ? "validated" : "review"}`;
   elements.statusText.dataset.mapSummary = summary;
   elements.statusText.textContent = summary;
@@ -56,6 +72,22 @@ function getElement<T extends HTMLElement>(id: string, constructor: { new (): T 
     throw new Error(`Missing required element: #${id}`);
   }
   return element;
+}
+
+function syncSizeSelect(select: HTMLSelectElement, size: number): void {
+  const value = String(size);
+  const knownOption = Array.from(select.options).some((option) => option.value === value);
+  if (!knownOption) {
+    let customOption = Array.from(select.options).find((option) => option.dataset.generatedSize === "true");
+    if (!customOption) {
+      customOption = new Option();
+      customOption.dataset.generatedSize = "true";
+      select.add(customOption, select.options[0] ?? null);
+    }
+    customOption.value = value;
+    customOption.textContent = `Custom ${value}`;
+  }
+  select.value = value;
 }
 
 function themeLabel(themeId: GeneratedMap["experience"]["theme"]["themeId"]): string {
