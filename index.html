@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Backroom Generator</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="viewport" aria-label="Generated Backrooms viewport"></div>
+
+      <section class="hud hud-primary" aria-label="Generator controls">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>Backroom Generator</span>
+        </div>
+        <label class="field">
+          <span>Seed</span>
+          <input id="seed-input" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="field size-field">
+          <span>Size</span>
+          <select id="size-select">
+            <option value="31">Compact</option>
+            <option value="39" selected>Standard</option>
+            <option value="49">Long Walk</option>
+            <option value="59">Labyrinth</option>
+          </select>
+        </label>
+        <button id="generate-button" type="button">Generate</button>
+        <button id="random-button" type="button">New Seed</button>
+        <button id="copy-button" type="button">Copy Link</button>
+      </section>
+
+      <section class="hud hud-status" aria-live="polite">
+        <span id="status-text">Ready</span>
+        <span id="map-stats">0 rooms</span>
+        <span id="fps-meter">-- FPS</span>
+      </section>
+
+      <div id="crosshair" aria-hidden="true"></div>
+
+      <div id="start-overlay" class="start-overlay">
+        <div class="start-panel">
+          <h1>Enter the generated backrooms</h1>
+          <p>WASD to move, mouse to look, Shift to run, Esc to release.</p>
+          <button id="start-button" type="button">Start Walking</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

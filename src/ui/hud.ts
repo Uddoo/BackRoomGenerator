@@ -1,0 +1,57 @@
+import type { GeneratedMap } from "../game/types";
+import type { SceneStats } from "../render/backroomsScene";
+
+export interface HudElements {
+  seedInput: HTMLInputElement;
+  sizeSelect: HTMLSelectElement;
+  generateButton: HTMLButtonElement;
+  randomButton: HTMLButtonElement;
+  copyButton: HTMLButtonElement;
+  startButton: HTMLButtonElement;
+  startOverlay: HTMLElement;
+  statusText: HTMLElement;
+  mapStats: HTMLElement;
+  fpsMeter: HTMLElement;
+}
+
+export function getHudElements(): HudElements {
+  return {
+    seedInput: getElement("seed-input", HTMLInputElement),
+    sizeSelect: getElement("size-select", HTMLSelectElement),
+    generateButton: getElement("generate-button", HTMLButtonElement),
+    randomButton: getElement("random-button", HTMLButtonElement),
+    copyButton: getElement("copy-button", HTMLButtonElement),
+    startButton: getElement("start-button", HTMLButtonElement),
+    startOverlay: getElement("start-overlay", HTMLElement),
+    statusText: getElement("status-text", HTMLElement),
+    mapStats: getElement("map-stats", HTMLElement),
+    fpsMeter: getElement("fps-meter", HTMLElement)
+  };
+}
+
+export function updateMapHud(elements: HudElements, map: GeneratedMap, stats: SceneStats): void {
+  elements.seedInput.value = map.seed;
+  elements.sizeSelect.value = String(map.width);
+  elements.statusText.textContent = `Seed ${map.seed}`;
+  elements.mapStats.textContent = `${map.openCount} cells · ${map.roomCount} rooms · ${stats.wallCount} walls`;
+}
+
+export function updatePerfHud(elements: HudElements, fps: number, stats: SceneStats): void {
+  if (fps > 0) {
+    elements.fpsMeter.textContent = `${fps} FPS · ${stats.drawCalls} draws`;
+  }
+}
+
+export function setPointerLocked(elements: HudElements, locked: boolean): void {
+  document.body.classList.toggle("is-pointer-locked", locked);
+  elements.startOverlay.classList.toggle("is-hidden", locked);
+  elements.statusText.textContent = locked ? "Exploring" : "Paused";
+}
+
+function getElement<T extends HTMLElement>(id: string, constructor: { new (): T }): T {
+  const element = document.getElementById(id);
+  if (!(element instanceof constructor)) {
+    throw new Error(`Missing required element: #${id}`);
+  }
+  return element;
+}
